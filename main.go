@@ -1,21 +1,28 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"github.com/bloveing/kube-client/pkg/client"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func main() {
-	clientSet, err := client.ClientSet()
-	if err != nil {
-		fmt.Println(err)
-	}
-	//d, err := clientSet.AppsV1().Deployments("").List(context.Background(),metav1.ListOptions{})
-	d, err := clientSet.AppsV1().Deployments("kubeapps").List(context.Background(), metav1.ListOptions{})
-	fmt.Println(d)
-	clientSet2, err := client.ClientSet()
-	d2, err := clientSet2.AppsV1().Deployments("k8s-api").List(context.Background(), metav1.ListOptions{})
-	fmt.Println(d2)
+	 discoveryClient, err := client.DiscoveryClient()
+    if err != nil {
+        panic(err)
+    }
+    _, APIResourceList, err := discoveryClient.ServerGroupsAndResources()
+    if err != nil {
+        panic(err)
+    }
+    for _, list := range APIResourceList {
+        gv, err := schema.ParseGroupVersion(list.GroupVersion)
+        if err != nil {
+            panic(err)
+        }
+        for _, resource := range list.APIResources {
+            fmt.Printf("name:%v, \t\t group:%v, \t\t version:%v\n", resource.Name, gv.Group, gv.Version)
+        }
+    }
+
 }
