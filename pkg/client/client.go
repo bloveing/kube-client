@@ -1,152 +1,111 @@
 package client
 
 import (
-	"bytes"
-	"fmt"
-	"io"
-
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/cli-runtime/pkg/resource"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/kubectl/pkg/validation"
+	scheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	"log"
+	"os"
+	"path/filepath"
+	"sync"
 )
 
-// DefaultValidation default action to validate. If `true` all resources by
-// default will be validated.
-const DefaultValidation = true
-
-// Client is a kubernetes client, like `kubectl`
-type Client struct {
-	Clientset        *kubernetes.Clientset
-	factory          *factory
-	validator        validation.Schema
-	namespace        string
-	enforceNamespace bool
-	forceConflicts   bool
-	ServerSideApply  bool
-}
-
-// Result is an alias for the Kubernetes CLI runtime resource.Result
-type Result = resource.Result
-
-// BuilderOptions parameters to create a Resource Builder
-type BuilderOptions struct {
-	Unstructured  bool
-	Validate      bool
-	Namespace     string
-	LabelSelector string
-	FieldSelector string
-	All           bool
-	AllNamespaces bool
-}
-
-// NewBuilderOptions creates a BuilderOptions with the default values for
-// the parameters to create a Resource Builder
-func NewBuilderOptions() *BuilderOptions {
-	return &BuilderOptions{
-		Unstructured: true,
-		Validate:     true,
+func homeDir() string {
+	if h := os.Getenv("HOME"); h != "" {
+		return h
 	}
+	if h := os.Getenv("USERPROFILE"); h != "" { // windows
+		return h
+	}
+
+	return "/root"
 }
 
-// NewE creates a kubernetes client, returns an error if fail
-func NewE(context, kubeconfig string) (*Client, error) {
-	factory := newFactory(context, kubeconfig)
-	namespace, enforceNamespace, err := factory.ToRawKubeConfigLoader().Namespace()
-	if err != nil {
-		namespace = v1.NamespaceDefault
-		enforceNamespace = true
-	}
-	clientset, err := factory.ClientSet()
+func InitConfig() (*rest.Config, error) {
+	//var kubeconfig *string
+	//if home := homeDir(); home != "" {
+	//	kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	//} else {
+	//	kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	//}
+	//flag.Parse()
+	path, _ := os.Getwd()
+	kubeConfig := filepath.Join(path, ".kube", "config")
+
+	// use the current context in kubeconfig
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
 	if err != nil {
 		return nil, err
 	}
-	if clientset == nil {
-		return nil, fmt.Errorf("cannot create a clientset from given context and kubeconfig")
-	}
+	return config, err
 
-	return &Client{
-		factory:          factory,
-		Clientset:        clientset,
-		namespace:        namespace,
-		enforceNamespace: enforceNamespace,
-	}, nil
 }
 
-// New creates a kubernetes client
-func New(context, kubeconfig string) *Client {
-	client, _ := NewE(context, kubeconfig)
-	return client
+func RESTClientCore() (*rest.RESTClient, error) {
+	var once sync.Once
+	var restClient *rest.RESTClient
+	var err error
+	once.Do(func() {
+		log.Print("start InitConfig()")
+		config, _ := InitConfig()
+
+		///设置config.APIPath请求的HTTP路径
+		config.APIPath = "api"
+		//设置config.GroupVersion请求的资源组/资源版本
+		config.GroupVersion = &corev1.SchemeGroupVersion
+		//设置config.NegotiatedSerializer数据的解码器
+		config.NegotiatedSerializer = scheme.Codecs
+
+		//实例化Client对象
+		restClient, err = rest.RESTClientFor(config)
+
+	})
+	return restClient, nil
 }
 
-// TODO Validate
-// Builder creates a resource builder
-func (c *Client) builder(opt *BuilderOptions) *resource.Builder {
-	validator := c.validator
-	namespace := c.namespace
-
-	if opt == nil {
-		opt = NewBuilderOptions()
-	} else {
-		if opt.Namespace != "" {
-			namespace = opt.Namespace
-		}
-	}
-
-	b := c.factory.NewBuilder()
-	if opt.Unstructured {
-		b = b.Unstructured()
-	}
-
-	return b.
-		Schema(validator).
-		ContinueOnError().
-		NamespaceParam(namespace).DefaultNamespace()
+// use sync.Once, so clientset can only init once
+func ClientSet() (*kubernetes.Clientset, error) {
+	var once sync.Once
+	var clientset *kubernetes.Clientset
+	var err error
+	once.Do(func() {
+		log.Print("start InitConfig()")
+		config, _ := InitConfig()
+		// create the clientset
+		clientset, err = kubernetes.NewForConfig(config)
+	})
+	return clientset, nil
 }
 
-// ResultForFilenameParam returns the builder results for the given list of files or URLs
-func (c *Client) ResultForFilenameParam(filenames []string, opt *BuilderOptions) *Result {
-	filenameOptions := &resource.FilenameOptions{
-		Recursive: false,
-		Filenames: filenames,
-	}
+func DynamicClient() (dynamic.Interface, error) {
+	var once sync.Once
+	var dynamicClient dynamic.Interface
+	var err error
 
-	return c.builder(opt).
-		FilenameParam(c.enforceNamespace, filenameOptions).
-		Flatten().
-		Do()
+	once.Do(func() {
+		log.Print("start InitConfig()")
+		config, _ := InitConfig()
+		// create the clientset
+		dynamicClient, err = dynamic.NewForConfig(config)
+
+	})
+	return dynamicClient, nil
 }
 
-// ResultForReader returns the builder results for the given reader
-func (c *Client) ResultForReader(r io.Reader, opt *BuilderOptions) *Result {
-	return c.builder(opt).
-		Stream(r, "").
-		Flatten().
-		Do()
-}
+func DiscoveryClient() (*discovery.DiscoveryClient, error) {
+	var once sync.Once
+	var discoveryClient *discovery.DiscoveryClient
+	var err error
 
-// func (c *Client) ResultForName(opt *BuilderOptions, names ...string) *Result {
-// 	return c.builder(opt).
-// 		LabelSelectorParam(opt.LabelSelector).
-// 		FieldSelectorParam(opt.FieldSelector).
-// 		SelectAllParam(opt.All).
-// 		AllNamespaces(opt.AllNamespaces).
-// 		ResourceTypeOrNameArgs(false, names...).RequireObject(false).
-// 		Flatten().
-// 		Do()
-// }
-
-// ResultForContent returns the builder results for the given content
-func (c *Client) ResultForContent(content []byte, opt *BuilderOptions) *Result {
-	b := bytes.NewBuffer(content)
-	return c.ResultForReader(b, opt)
-}
-
-func failedTo(action string, info *resource.Info, err error) error {
-	var resKind string
-	if info.Mapping != nil {
-		resKind = info.Mapping.GroupVersionKind.Kind + " "
-	}
-
-	return fmt.Errorf("cannot %s object Kind: %q,	Name: %q, Namespace: %q. %s", action, resKind, info.Name, info.Namespace, err)
+	once.Do(func() {
+		log.Print("start InitConfig()")
+		config, _ := InitConfig()
+		// create the clientset
+		discoveryClient, err = discovery.NewDiscoveryClientForConfig(config)
+	})
+	return discoveryClient, nil
 }
