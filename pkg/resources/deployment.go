@@ -16,6 +16,9 @@ func GetDeploymentList() (*v1.DeploymentList, error) {
 	return deploy, err
 }
 
+// GetDeploymentListByNamespace 获取指定ns的 Deployment 的列表。
+//
+// 传入参数:namespace名称；返回：DeploymentList
 func GetDeploymentListByNamespace(namespace string) (*v1.DeploymentList, error) {
 	clientSet, err := client.ClientSet()
 	if err != nil {
@@ -33,8 +36,9 @@ func GetDeploymentByName(namespace, name string) (*v1.Deployment, error) {
 	deploy, err := clientSet.AppsV1().Deployments(namespace).Get(context.Background(), name, metav1.GetOptions{})
 	return deploy, err
 }
-// TODO : create Deployment
 
+// TODO : create Deployment
+// TODO: modify - POST
 func DeleteDeployment(namespace, name string) error {
 	clientSet, err := client.ClientSet()
 	if err != nil {
@@ -60,7 +64,7 @@ func ScaleDeployment(namespace, name string, num int32) (*v1.Deployment, error) 
 	return dps, err
 }
 
-func ChangeImageDeployment(namespace, name, image string) (*v1.Deployment, error) {
+func PutImageDeployment(namespace, name, image string) (*v1.Deployment, error) {
 	clientSet, err := client.ClientSet()
 	if err != nil {
 		return nil, err
