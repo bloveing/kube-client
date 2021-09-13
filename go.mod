@@ -3,6 +3,7 @@ module github.com/bloveing/kube-client
 go 1.16
 
 require (
+	github.com/elastic/cloud-on-k8s v0.0.0-20210909122551-2430176959e0 // indirect
 	github.com/yuin/goldmark v1.4.0 // indirect
 	golang.org/x/mod v0.5.0 // indirect
 	golang.org/x/net v0.0.0-20210907225631-ff17edfbf26d // indirect

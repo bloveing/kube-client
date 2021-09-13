@@ -1,4 +1,4 @@
-package main
+package crd
 
 import (
 	"fmt"
@@ -6,7 +6,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func main() {
+type GVKStruct struct {
+	Group   string
+	Version string
+	Kind    string
+	Name    string
+}
+
+func GVKList() (GVKList map[string]GVKStruct, err error) {
 	discoveryClient, err := client.DiscoveryClient()
 	if err != nil {
 		panic(err)
@@ -21,8 +28,11 @@ func main() {
 			panic(err)
 		}
 		for _, resource := range list.APIResources {
-			fmt.Printf("group:%v,\t\t version:%v,\t\t name:%v, kind:%v \t\t  \n", gv.Group, gv.Version, resource.Name, resource.Kind)
+			fmt.Printf("name:%v,group:%v,version:%v\n", resource.Name, gv.Group, gv.Version)
+			fmt.Println(resource.Name)
+
 		}
 	}
+	return nil, nil
 
 }
